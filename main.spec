@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['main.py'],
+    ['C:\\Users\\omars\\OneDrive\\Documents\\GitHub\\draw-tink\\main.py'],
     pathex=[],
     binaries=[],
     datas=[],

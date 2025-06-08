@@ -4,10 +4,13 @@ import urllib.request
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
     QColorDialog, QFileDialog, QSlider, QListWidget, QListWidgetItem, QGraphicsOpacityEffect,
-    QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QScrollArea, QMenuBar, QMenu, QAction
+    QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QScrollArea, QMenuBar, QMenu
 )
-from PyQt6.QtGui import QPainter, QPen, QColor, QPixmap, QImage, QWheelEvent, QIcon, QTransform
+from PyQt6.QtGui import (
+    QPainter, QPen, QColor, QPixmap, QImage, QWheelEvent, QIcon, QTransform, QAction
+)
 from PyQt6.QtCore import Qt, QPoint, QSize
+
 
 APP_VERSION = "1.0"
 VERSION_URL = "https://raw.githubusercontent.com/komazixd/draw-tink/main/version.txt"
