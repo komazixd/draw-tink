@@ -3,19 +3,22 @@ import os
 import urllib.request
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
-    QColorDialog, QFileDialog, QSlider, QListWidget, QListWidgetItem, QGraphicsOpacityEffect
+    QColorDialog, QFileDialog, QSlider, QListWidget, QListWidgetItem, QGraphicsOpacityEffect,
+    QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QScrollArea, QMenuBar, QMenu, QAction
 )
-from PyQt6.QtGui import QPainter, QPen, QColor, QPixmap, QImage
-from PyQt6.QtCore import Qt, QPoint
+from PyQt6.QtGui import QPainter, QPen, QColor, QPixmap, QImage, QWheelEvent, QIcon, QTransform
+from PyQt6.QtCore import Qt, QPoint, QSize
 
 APP_VERSION = "1.0"
 VERSION_URL = "https://raw.githubusercontent.com/komazixd/draw-tink/main/version.txt"
 UPDATE_URL = "https://github.com/komazixd/draw-tink/releases/latest/download/tinkmaker.exe"
+MAIN_PY_PATH = "C:/Users/omars/OneDrive/Documents/GitHub/draw-tink/main.py"
+MAIN_EXE_PATH = "C:/Users/omars/OneDrive/Documents/GitHub/draw-tink/dist/main.exe"
 
 class Canvas(QWidget):
     def __init__(self):
         super().__init__()
-        self.setFixedSize(1000, 800)
+        self.setFixedSize(2000, 1600)
         self.pixmap = QPixmap(self.size())
         self.pixmap.fill(Qt.GlobalColor.white)
         self.pen_color = QColor('black')
@@ -27,6 +30,7 @@ class Canvas(QWidget):
         self.undo_stack = []
         self.redo_stack = []
         self.shape = None
+        self.offset = QPoint(0, 0)
 
     def set_tool(self, tool):
         self.tool = tool
@@ -53,9 +57,9 @@ class Canvas(QWidget):
                 pen = QPen(self.pen_color, self.pen_size)
                 painter.setPen(pen)
                 painter.setOpacity(self.opacity)
+                p = self.last_point
                 if self.shape == "Heart":
-                    p = self.last_point
-                    painter.drawText(p, "♥")  # Unicode heart
+                    painter.drawText(p, "♥")
                 self.update()
                 self.shape = None
                 self.drawing = False
@@ -116,18 +120,15 @@ class TinkMaker(QMainWindow):
         layout = QVBoxLayout()
         tools = QHBoxLayout()
 
-        # Tool buttons
         for name in ["Pen", "Eraser"]:
             btn = QPushButton(name)
             btn.clicked.connect(lambda _, n=name.lower(): self.canvas.set_tool(n))
             tools.addWidget(btn)
 
-        # Color
         color_btn = QPushButton("Color")
         color_btn.clicked.connect(self.select_color)
         tools.addWidget(color_btn)
 
-        # Opacity
         opacity_slider = QSlider(Qt.Orientation.Horizontal)
         opacity_slider.setRange(1, 100)
         opacity_slider.setValue(100)
@@ -135,7 +136,6 @@ class TinkMaker(QMainWindow):
         tools.addWidget(QLabel("Opacity"))
         tools.addWidget(opacity_slider)
 
-        # Pen size
         size_slider = QSlider(Qt.Orientation.Horizontal)
         size_slider.setRange(1, 50)
         size_slider.setValue(5)
@@ -143,18 +143,15 @@ class TinkMaker(QMainWindow):
         tools.addWidget(QLabel("Size"))
         tools.addWidget(size_slider)
 
-        # Shapes
         shape_btn = QPushButton("Heart Shape")
         shape_btn.clicked.connect(lambda: self.canvas.set_shape("Heart"))
         tools.addWidget(shape_btn)
 
-        # Undo/Redo
         for name, func in [("Undo", self.canvas.undo), ("Redo", self.canvas.redo)]:
             btn = QPushButton(name)
             btn.clicked.connect(func)
             tools.addWidget(btn)
 
-        # Save / Paste
         save_btn = QPushButton("Save")
         save_btn.clicked.connect(self.canvas.save_image)
         tools.addWidget(save_btn)
@@ -163,11 +160,25 @@ class TinkMaker(QMainWindow):
         paste_btn.clicked.connect(self.canvas.paste_image)
         tools.addWidget(paste_btn)
 
+        brightness_slider = QSlider(Qt.Orientation.Horizontal)
+        brightness_slider.setRange(30, 255)
+        brightness_slider.setValue(255)
+        brightness_slider.valueChanged.connect(self.set_brightness)
+        tools.addWidget(QLabel("Brightness"))
+        tools.addWidget(brightness_slider)
+
+        credit = QLabel("Credits: @infiniteinfinite ; dc")
+        tools.addWidget(credit)
+
         container = QWidget()
         layout.addLayout(tools)
         layout.addWidget(self.canvas)
         container.setLayout(layout)
         self.setCentralWidget(container)
+
+    def set_brightness(self, value):
+        val = value
+        self.setStyleSheet(f"background-color: rgb({val}, {val}, {val}); color: black;")
 
     def select_color(self):
         color = QColorDialog.getColor()
@@ -179,9 +190,11 @@ class TinkMaker(QMainWindow):
             with urllib.request.urlopen(VERSION_URL) as response:
                 latest_version = response.read().decode("utf-8").strip()
                 if latest_version != APP_VERSION:
-                    reply = QFileDialog.getSaveFileName(self, "Update Available", "", "EXE (*.exe)")
-                    if reply[0]:
-                        urllib.request.urlretrieve(UPDATE_URL, reply[0])
+                    with open(MAIN_PY_PATH, "r") as src:
+                        with open("updated_main.py", "w") as dst:
+                            dst.write(src.read())
+                    os.system(f'pyinstaller --noconfirm --onefile --windowed --name "main" updated_main.py')
+                    os.replace("dist/main.exe", MAIN_EXE_PATH)
         except Exception as e:
             print(f"Update check failed: {e}")
 
