@@ -1,37 +1,22 @@
-import requests
-import os
-import sys
-import shutil
-import zipfile
+import requests, zipfile, os, sys, shutil
 
 REPO_URL = "https://github.com/komazixd/draw-tink"
-ZIP_URL = "https://github.com/komazixd/draw-tink/archive/refs/heads/main.zip"
-APP_FILENAME = "drawing_app"
+REPO_RAW_URL = "https://raw.githubusercontent.com/komazixd/draw-tink/main"
+FILENAME = "main.py"  # your main drawing app file name
 
-def update_app():
-    print("hmm tink for updates...")
-    r = requests.get(ZIP_URL)
-    zip_path = "update.zip"
-    
-    with open(zip_path, "wb") as f:
-        f.write(r.content)
-
-    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-        zip_ref.extractall("update")
-
-    extracted_dir = os.path.join("update", os.listdir("update")[0])
-
-    updated_file_path = os.path.join(extracted_dir, APP_FILENAME)
-
-    if os.path.exists(updated_file_path):
-        shutil.copy(updated_file_path, APP_FILENAME)
-        print("Updated tinker is corect!")
-    else:
-        print("Update is not hear.")
-
-    shutil.rmtree("update")
-    os.remove(zip_path)
+def update():
+    try:
+        print("[UPDATER] Checking for updates...")
+        r = requests.get(f"{REPO_RAW_URL}/{FILENAME}")
+        if r.status_code == 200:
+            with open("main_updated.py", "w", encoding="utf-8") as f:
+                f.write(r.text)
+            print("[UPDATER] Update downloaded. Launching new version.")
+            os.system(f"python main_updated.py")
+        else:
+            print("[UPDATER] No update found.")
+    except Exception as e:
+        print(f"[UPDATER] Failed to update: {e}")
 
 if __name__ == "__main__":
-    update_app()
-    os.system(f"{sys.executable} {APP_FILENAME}")
+    update()
