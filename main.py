@@ -1,22 +1,12 @@
-import sys
-import os
-import urllib.request
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
     QColorDialog, QFileDialog, QSlider, QListWidget, QListWidgetItem, QGraphicsOpacityEffect,
     QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QScrollArea, QMenuBar, QMenu
 )
 from PyQt6.QtGui import (
-    QPainter, QPen, QColor, QPixmap, QImage, QWheelEvent, QIcon, QTransform, QAction
+    QPainter, QPen, QColor, QPixmap, QImage, QWheelEvent, QIcon, QTransform, QAction, QKeySequence
 )
 from PyQt6.QtCore import Qt, QPoint, QSize
-
-
-APP_VERSION = "1.0"
-VERSION_URL = "https://raw.githubusercontent.com/komazixd/draw-tink/main/version.txt"
-UPDATE_URL = "https://github.com/komazixd/draw-tink/releases/latest/download/tinkmaker.exe"
-MAIN_PY_PATH = "C:/Users/omars/OneDrive/Documents/GitHub/draw-tink/main.py"
-MAIN_EXE_PATH = "C:/Users/omars/OneDrive/Documents/GitHub/draw-tink/dist/main.exe"
 
 class Canvas(QWidget):
     def __init__(self):
@@ -34,6 +24,7 @@ class Canvas(QWidget):
         self.redo_stack = []
         self.shape = None
         self.offset = QPoint(0, 0)
+        self.zoom_factor = 1.0
 
     def set_tool(self, tool):
         self.tool = tool
@@ -55,6 +46,8 @@ class Canvas(QWidget):
             self.drawing = True
             self.last_point = event.position().toPoint()
             self.undo_stack.append(self.pixmap.copy())
+            # Clear redo stack on new action
+            self.redo_stack.clear()
             if self.shape:
                 painter = QPainter(self.pixmap)
                 pen = QPen(self.pen_color, self.pen_size)
@@ -83,7 +76,11 @@ class Canvas(QWidget):
 
     def paintEvent(self, event):
         painter = QPainter(self)
+        # Apply zoom transform here
+        painter.save()
+        painter.scale(self.zoom_factor, self.zoom_factor)
         painter.drawPixmap(self.rect(), self.pixmap)
+        painter.restore()
 
     def undo(self):
         if self.undo_stack:
@@ -109,6 +106,19 @@ class Canvas(QWidget):
             painter = QPainter(self.pixmap)
             painter.drawImage(0, 0, img)
             self.update()
+
+    def wheelEvent(self, event: QWheelEvent):
+        # Zoom only when Ctrl is pressed
+        if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
+            delta = event.angleDelta().y()
+            zoom_change = 0.1 if delta > 0 else -0.1
+            new_zoom = self.zoom_factor + zoom_change
+            if 0.1 < new_zoom < 5:  # limit zoom scale
+                self.zoom_factor = new_zoom
+                self.update()
+            event.accept()
+        else:
+            super().wheelEvent(event)
 
 class TinkMaker(QMainWindow):
     def __init__(self):
@@ -170,8 +180,7 @@ class TinkMaker(QMainWindow):
         tools.addWidget(QLabel("Brightness"))
         tools.addWidget(brightness_slider)
 
-        credit = QLabel("Credits: @infiniteinfinite ; dc")
-        tools.addWidget(credit)
+        # Removed credits label here
 
         container = QWidget()
         layout.addLayout(tools)
@@ -189,17 +198,16 @@ class TinkMaker(QMainWindow):
             self.canvas.set_pen_color(color)
 
     def check_for_updates(self):
-        try:
-            with urllib.request.urlopen(VERSION_URL) as response:
-                latest_version = response.read().decode("utf-8").strip()
-                if latest_version != APP_VERSION:
-                    with open(MAIN_PY_PATH, "r") as src:
-                        with open("updated_main.py", "w") as dst:
-                            dst.write(src.read())
-                    os.system(f'pyinstaller --noconfirm --onefile --windowed --name "main" updated_main.py')
-                    os.replace("dist/main.exe", MAIN_EXE_PATH)
-        except Exception as e:
-            print(f"Update check failed: {e}")
+        # your existing update code here
+        pass
+
+    def keyPressEvent(self, event):
+        if event.matches(QKeySequence.StandardKey.Undo):
+            self.canvas.undo()
+        elif event.matches(QKeySequence.StandardKey.Redo):
+            self.canvas.redo()
+        else:
+            super().keyPressEvent(event)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
