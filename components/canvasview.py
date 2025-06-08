@@ -1,234 +1,206 @@
-from PyQt6.QtWidgets import QWidget, QFileDialog
-from PyQt6.QtGui import (
-    QPainter, QPen, QColor, QPixmap, QPainterPath,
-    QMouseEvent, QWheelEvent, QGuiApplication
-)
-from PyQt6.QtCore import Qt, QPointF, QRectF
-
+from PyQt6.QtWidgets import QWidget, QApplication
+from PyQt6.QtGui import QPainter, QColor, QPen, QPixmap, QMouseEvent, QWheelEvent, QKeyEvent
+from PyQt6.QtCore import Qt, QPoint, QRectF
 
 class CanvasView(QWidget):
     def __init__(self):
         super().__init__()
-        self.setMinimumSize(800, 600)
-        self.pixmap = QPixmap(self.size())
-        self.pixmap.fill(Qt.GlobalColor.white)
 
-        self.pen_color = QColor("black")
-        self.pen_size = 5
+        # Canvas image where we draw
+        self.image = QPixmap(1600, 1200)
+        self.image.fill(QColor('white'))
+
+        # Drawing state
         self.drawing = False
-        self.last_point = None
-        self.tool = "pen"  # pen, eraser, shape, select, pan
-        self.shape = None  # rectangle, ellipse, heart
+        self.last_point = QPoint()
 
-        self.undo_stack = []
-        self.redo_stack = []
+        # Brush settings
+        self.brush_color = QColor('black')
+        self.brush_size = 5
+        self.brush_opacity = 255  # 0-255
 
-        self.scale_factor = 1.0
-        self.offset = QPointF(0, 0)
-
+        # Zoom & pan
+        self.zoom = 1.0
+        self.offset = QPoint(0, 0)
         self.panning = False
-        self.pan_start_pos = QPointF()
+        self.pan_start = QPoint()
 
-        self.selection_rect = None
-        self.selected_pixmap = None
-        self.selection_offset = QPointF()
-        self.dragging_selection = False
+        # Shape tool mode ('brush', 'eraser', 'line', 'rectangle', 'ellipse', 'none')
+        self.tool = 'brush'
 
-    def set_tool(self, tool_name):
+        # Shape drawing temp vars
+        self.shape_start = None
+        self.shape_end = None
+
+        # For smooth painting (optional)
+        self.setAttribute(Qt.WidgetAttribute.WA_StaticContents)
+
+        self.setMinimumSize(800, 600)
+        self.setMouseTracking(True)
+
+    def set_brush_color(self, color: QColor):
+        self.brush_color = color
+
+    def set_brush_size(self, size: int):
+        self.brush_size = max(1, size)
+
+    def set_brush_opacity(self, opacity: int):
+        self.brush_opacity = max(0, min(255, opacity))
+
+    def set_tool(self, tool_name: str):
         self.tool = tool_name
-        self.selection_rect = None
-        self.selected_pixmap = None
-        self.update()
 
-    def set_shape(self, shape_name):
-        self.shape = shape_name
-        self.set_tool("shape")
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.fillRect(self.rect(), QColor('white'))
 
-    def set_pen_color(self, color):
-        self.pen_color = color
+        # Apply zoom and pan transformations
+        painter.translate(self.offset)
+        painter.scale(self.zoom, self.zoom)
 
-    def set_pen_size(self, size):
-        self.pen_size = size
+        # Draw the current canvas image
+        painter.drawPixmap(0, 0, self.image)
 
-    def undo(self):
-        if self.undo_stack:
-            self.redo_stack.append(self.pixmap.copy())
-            self.pixmap = self.undo_stack.pop()
-            self.update()
+        # If drawing shapes, show preview
+        if self.tool in ['line', 'rectangle', 'ellipse'] and self.drawing and self.shape_start and self.shape_end:
+            pen = QPen(self.brush_color)
+            pen.setWidth(self.brush_size)
+            pen.setStyle(Qt.PenStyle.SolidLine)
+            painter.setPen(pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
 
-    def redo(self):
-        if self.redo_stack:
-            self.undo_stack.append(self.pixmap.copy())
-            self.pixmap = self.redo_stack.pop()
-            self.update()
+            rect = QRectF(self.shape_start, self.shape_end)
+            if self.tool == 'line':
+                painter.drawLine(self.shape_start, self.shape_end)
+            elif self.tool == 'rectangle':
+                painter.drawRect(rect.normalized())
+            elif self.tool == 'ellipse':
+                painter.drawEllipse(rect.normalized())
 
     def mousePressEvent(self, event: QMouseEvent):
         if event.button() == Qt.MouseButton.LeftButton:
-            pos = self.map_to_canvas(event.position())
-            if self.tool in ("pen", "eraser"):
-                self.undo_stack.append(self.pixmap.copy())
-                self.redo_stack.clear()
+            pos = self.transform_pos(event.position().toPoint())
+            if self.tool == 'brush' or self.tool == 'eraser':
                 self.drawing = True
                 self.last_point = pos
-            elif self.tool == "shape":
-                self.undo_stack.append(self.pixmap.copy())
-                self.redo_stack.clear()
-                self.start_point = pos
+                self.draw_point(pos)
+            elif self.tool in ['line', 'rectangle', 'ellipse']:
                 self.drawing = True
-            elif self.tool == "select":
-                if self.selection_rect and self.selection_rect.contains(pos):
-                    self.dragging_selection = True
-                    self.selection_offset = pos - self.selection_rect.topLeft()
-                else:
-                    self.selection_rect = QRectF(pos, pos)
-                    self.selected_pixmap = None
-                    self.drawing = True
-            elif self.tool == "pan":
+                self.shape_start = pos
+                self.shape_end = pos
+            elif self.tool == 'pan':
                 self.panning = True
-                self.pan_start_pos = event.position()
-        elif event.button() == Qt.MouseButton.MiddleButton:
-            self.panning = True
-            self.pan_start_pos = event.position()
+                self.pan_start = event.position().toPoint()
+                self.setCursor(Qt.CursorShape.ClosedHandCursor)
 
     def mouseMoveEvent(self, event: QMouseEvent):
-        pos = self.map_to_canvas(event.position())
+        pos = self.transform_pos(event.position().toPoint())
         if self.drawing:
-            if self.tool == "pen":
-                painter = QPainter(self.pixmap)
-                pen = QPen(self.pen_color, self.pen_size, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
-                painter.setPen(pen)
-                painter.drawLine(self.last_point, pos)
+            if self.tool == 'brush':
+                self.draw_line(self.last_point, pos)
                 self.last_point = pos
-                self.update()
-            elif self.tool == "eraser":
-                painter = QPainter(self.pixmap)
-                pen = QPen(Qt.GlobalColor.white, self.pen_size * 2, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
-                painter.setPen(pen)
-                painter.drawLine(self.last_point, pos)
+            elif self.tool == 'eraser':
+                self.erase_line(self.last_point, pos)
                 self.last_point = pos
+            elif self.tool in ['line', 'rectangle', 'ellipse']:
+                self.shape_end = pos
                 self.update()
-            elif self.tool == "shape":
-                self.end_point = pos
-                self.update()
-            elif self.tool == "select" and self.drawing:
-                self.selection_rect.setBottomRight(pos)
-                self.update()
-        elif self.dragging_selection:
-            new_top_left = pos - self.selection_offset
-            self.selection_rect.moveTo(new_top_left)
-            self.update()
         elif self.panning:
-            delta = event.position() - self.pan_start_pos
+            delta = event.position().toPoint() - self.pan_start
             self.offset += delta
-            self.pan_start_pos = event.position()
+            self.pan_start = event.position().toPoint()
             self.update()
 
     def mouseReleaseEvent(self, event: QMouseEvent):
         if event.button() == Qt.MouseButton.LeftButton:
-            pos = self.map_to_canvas(event.position())
             if self.drawing:
-                if self.tool == "shape" and self.shape:
-                    painter = QPainter(self.pixmap)
-                    pen = QPen(self.pen_color, self.pen_size)
-                    painter.setPen(pen)
-                    brush_color = QColor(self.pen_color)
-                    brush_color.setAlpha(50)
-                    painter.setBrush(brush_color)
-                    rect = QRectF(self.start_point, pos)
-                    if self.shape == "rectangle":
-                        painter.drawRect(rect)
-                    elif self.shape == "ellipse":
-                        painter.drawEllipse(rect)
-                    elif self.shape == "heart":
-                        path = self._heart_path(rect)
-                        painter.drawPath(path)
-                    self.update()
+                pos = self.transform_pos(event.position().toPoint())
+                if self.tool in ['line', 'rectangle', 'ellipse']:
+                    self.shape_end = pos
+                    self.draw_shape()
+                    self.shape_start = None
+                    self.shape_end = None
                 self.drawing = False
-            elif self.dragging_selection:
-                self.dragging_selection = False
-            elif self.panning:
+                self.update()
+            if self.panning:
                 self.panning = False
-
-    def _heart_path(self, rect):
-        path = QPainterPath()
-        x, y, w, h = rect.x(), rect.y(), rect.width(), rect.height()
-        path.moveTo(x + w/2, y + h/5)
-        path.cubicTo(x + w/2, y, x, y, x, y + h/3)
-        path.cubicTo(x, y + h*2/3, x + w/2, y + h*4/5, x + w/2, y + h)
-        path.cubicTo(x + w/2, y + h*4/5, x + w, y + h*2/3, x + w, y + h/3)
-        path.cubicTo(x + w, y, x + w/2, y, x + w/2, y + h/5)
-        path.closeSubpath()
-        return path
-
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.fillRect(self.rect(), Qt.GlobalColor.white)
-
-        painter.translate(self.offset)
-        painter.scale(self.scale_factor, self.scale_factor)
-
-        painter.drawPixmap(0, 0, self.pixmap)
-
-        if self.drawing and self.tool == "shape" and self.shape:
-            pen = QPen(self.pen_color, self.pen_size, Qt.PenStyle.DashLine)
-            painter.setPen(pen)
-            brush_color = QColor(self.pen_color)
-            brush_color.setAlpha(50)
-            painter.setBrush(brush_color)
-            rect = QRectF(self.start_point, self.end_point)
-            if self.shape == "rectangle":
-                painter.drawRect(rect)
-            elif self.shape == "ellipse":
-                painter.drawEllipse(rect)
-            elif self.shape == "heart":
-                path = self._heart_path(rect)
-                painter.drawPath(path)
-
-        if self.selection_rect:
-            pen = QPen(Qt.GlobalColor.blue, 2, Qt.PenStyle.DashLine)
-            painter.setPen(pen)
-            painter.setBrush(Qt.BrushStyle.NoBrush)
-            painter.drawRect(self.selection_rect)
-
-    def map_to_canvas(self, pointf):
-        return (pointf - self.offset) / self.scale_factor
+                self.setCursor(Qt.CursorShape.ArrowCursor)
 
     def wheelEvent(self, event: QWheelEvent):
-        modifiers = event.modifiers()
-        delta = event.angleDelta().y()
+        angle = event.angleDelta().y()
+        factor = 1.15 if angle > 0 else 1 / 1.15
+        old_zoom = self.zoom
+        self.zoom *= factor
+        self.zoom = max(0.1, min(self.zoom, 5.0))
 
-        if modifiers == Qt.KeyboardModifier.ControlModifier:
-            zoom_speed = 0.0015
-            old_scale = self.scale_factor
-            self.scale_factor += delta * zoom_speed
-            self.scale_factor = max(0.1, min(10, self.scale_factor))
-            cursor_pos = event.position()
-            cursor_pos_before = (cursor_pos - self.offset) / old_scale
-            self.offset = cursor_pos - cursor_pos_before * self.scale_factor
-            self.update()
+        # Adjust offset to zoom towards cursor
+        cursor_pos = event.position().toPoint()
+        before_scale = (cursor_pos - self.offset) / old_zoom
+        after_scale = (cursor_pos - self.offset) / self.zoom
+        self.offset += (after_scale - before_scale) * self.zoom
 
-        elif modifiers == (Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier):
-            pan_speed = 1.0
-            self.offset.setX(self.offset.x() + delta * pan_speed)
-            self.update()
+        self.update()
 
-        elif modifiers == Qt.KeyboardModifier.ShiftModifier:
-            pan_speed = 1.0
-            self.offset.setY(self.offset.y() + delta * pan_speed)
-            self.update()
+    def transform_pos(self, pos: QPoint) -> QPoint:
+        # Convert widget coords to image coords considering zoom and pan
+        x = (pos.x() - self.offset.x()) / self.zoom
+        y = (pos.y() - self.offset.y()) / self.zoom
+        return QPoint(int(x), int(y))
 
-    def paste_image(self):
-        clipboard = QGuiApplication.clipboard()
-        mime_data = clipboard.mimeData()
-        if mime_data.hasImage():
-            img = clipboard.image()
-            if not img.isNull():
-                painter = QPainter(self.pixmap)
-                painter.drawImage(0, 0, img)
-                self.update()
+    def draw_point(self, pos: QPoint):
+        painter = QPainter(self.image)
+        pen = QPen(self.brush_color)
+        pen.setWidth(self.brush_size)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
 
-    def save_image(self, path=None):
-        if not path:
-            path, _ = QFileDialog.getSaveFileName(self, "Save Image", "", "PNG Files (*.png);;JPEG Files (*.jpg)")
-        if path:
-            self.pixmap.save(path)
+        color = QColor(self.brush_color)
+        color.setAlpha(self.brush_opacity)
+        pen.setColor(color)
+
+        painter.setPen(pen)
+        painter.drawPoint(pos)
+        self.update()
+
+    def draw_line(self, start: QPoint, end: QPoint):
+        painter = QPainter(self.image)
+        pen = QPen(self.brush_color)
+        pen.setWidth(self.brush_size)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+
+        color = QColor(self.brush_color)
+        color.setAlpha(self.brush_opacity)
+        pen.setColor(color)
+
+        painter.setPen(pen)
+        painter.drawLine(start, end)
+        self.update()
+
+    def erase_line(self, start: QPoint, end: QPoint):
+        painter = QPainter(self.image)
+        pen = QPen(QColor('white'))
+        pen.setWidth(self.brush_size * 2)  # Eraser bigger than brush
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+
+        painter.setPen(pen)
+        painter.drawLine(start, end)
+        self.update()
+
+    def draw_shape(self):
+        painter = QPainter(self.image)
+        pen = QPen(self.brush_color)
+        pen.setWidth(self.brush_size)
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+
+        rect = QRectF(self.shape_start, self.shape_end).normalized()
+        if self.tool == 'line':
+            painter.drawLine(self.shape_start, self.shape_end)
+        elif self.tool == 'rectangle':
+            painter.drawRect(rect)
+        elif self.tool == 'ellipse':
+            painter.drawEllipse(rect)
+
+        self.update()

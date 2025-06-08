@@ -1,16 +1,13 @@
-# components/templatemanager.py
-class TemplateManager:
+from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout
+
+class TemplateManager(QWidget):
     def __init__(self):
-        self.templates = []
+        super().__init__()
+        self.initUI()
 
-    def save_template(self, name, pixmap):
-        self.templates.append((name, pixmap.copy()))
+    def initUI(self):
+        layout = QVBoxLayout()
+        self.setLayout(layout)
 
-    def load_template(self, name):
-        for tmpl_name, pix in self.templates:
-            if tmpl_name == name:
-                return pix.copy()
-        return None
-
-    def list_templates(self):
-        return [name for name, _ in self.templates]
+        label = QLabel("Template Manager Placeholder")
+        layout.addWidget(label)
