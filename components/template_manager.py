@@ -1,43 +1,16 @@
-from PyQt6.QtWidgets import QWidget, QListWidget, QVBoxLayout, QPushButton, QMessageBox
-
-class TemplateManager(QWidget):
+# components/templatemanager.py
+class TemplateManager:
     def __init__(self):
-        super().__init__()
-        self.templates = {
-            "Simple Square": self.template_square,
-            "Simple Circle": self.template_circle
-        }
-        self.init_ui()
+        self.templates = []
 
-    def init_ui(self):
-        layout = QVBoxLayout()
-        self.list_widget = QListWidget()
-        for name in self.templates.keys():
-            self.list_widget.addItem(name)
-        layout.addWidget(self.list_widget)
+    def save_template(self, name, pixmap):
+        self.templates.append((name, pixmap.copy()))
 
-        load_btn = QPushButton("Load Template")
-        load_btn.clicked.connect(self.load_template)
-        layout.addWidget(load_btn)
+    def load_template(self, name):
+        for tmpl_name, pix in self.templates:
+            if tmpl_name == name:
+                return pix.copy()
+        return None
 
-        self.setLayout(layout)
-
-    def load_template(self):
-        selected = self.list_widget.currentItem()
-        if not selected:
-            QMessageBox.warning(self, "No selection", "Please select a template to load.")
-            return
-        template_name = selected.text()
-        func = self.templates.get(template_name)
-        if func:
-            func()
-        else:
-            QMessageBox.warning(self, "Error", "Template not found.")
-
-    def template_square(self):
-        # placeholder for loading a square template - you expand this!
-        print("Load square template")
-
-    def template_circle(self):
-        # placeholder for loading a circle template - you expand this!
-        print("Load circle template")
+    def list_templates(self):
+        return [name for name, _ in self.templates]

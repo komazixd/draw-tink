@@ -1,51 +1,13 @@
-from PyQt6.QtGui import QPainter, QColor, QPen, QBrush
-from PyQt6.QtCore import QRect, QPoint
+from PyQt6.QtGui import QPainterPath
+from PyQt6.QtCore import QRectF
 
-class Shape:
-    def __init__(self, x, y, width, height, stroke_color=QColor('black'), fill_color=QColor('transparent')):
-        self.rect = QRect(x, y, width, height)
-        self.stroke_color = stroke_color
-        self.fill_color = fill_color
-        self.selected = False
-
-    def draw(self, painter: QPainter):
-        raise NotImplementedError
-
-    def contains(self, point: QPoint):
-        return self.rect.contains(point)
-
-    def move(self, dx, dy):
-        self.rect.translate(dx, dy)
-
-    def resize(self, new_width, new_height):
-        self.rect.setWidth(new_width)
-        self.rect.setHeight(new_height)
-
-class RectangleShape(Shape):
-    def draw(self, painter: QPainter):
-        pen = QPen(self.stroke_color, 2)
-        brush = QBrush(self.fill_color)
-        painter.setPen(pen)
-        painter.setBrush(brush)
-        painter.drawRect(self.rect)
-        if self.selected:
-            # draw selection highlight (dashed rectangle)
-            pen.setStyle(Qt.PenStyle.DashLine)
-            painter.setPen(pen)
-            painter.setBrush(QBrush(Qt.GlobalColor.transparent))
-            painter.drawRect(self.rect)
-
-class EllipseShape(Shape):
-    def draw(self, painter: QPainter):
-        pen = QPen(self.stroke_color, 2)
-        brush = QBrush(self.fill_color)
-        painter.setPen(pen)
-        painter.setBrush(brush)
-        painter.drawEllipse(self.rect)
-        if self.selected:
-            pen.setStyle(Qt.PenStyle.DashLine)
-            painter.setPen(pen)
-            painter.setBrush(QBrush(Qt.GlobalColor.transparent))
-            painter.drawEllipse(self.rect)
-
-# You can add more shapes like HeartShape similarly
+def heart_path(rect: QRectF) -> QPainterPath:
+    path = QPainterPath()
+    x, y, w, h = rect.x(), rect.y(), rect.width(), rect.height()
+    path.moveTo(x + w / 2, y + h / 5)
+    path.cubicTo(x + w / 2, y, x, y, x, y + h / 3)
+    path.cubicTo(x, y + h * 2 / 3, x + w / 2, y + h * 4 / 5, x + w / 2, y + h)
+    path.cubicTo(x + w / 2, y + h * 4 / 5, x + w, y + h * 2 / 3, x + w, y + h / 3)
+    path.cubicTo(x + w, y, x + w / 2, y, x + w / 2, y + h / 5)
+    path.closeSubpath()
+    return path
