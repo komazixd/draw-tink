@@ -1,70 +1,85 @@
-# components/toolbar.py
-from PyQt6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QLabel, QComboBox, QSlider, QColorDialog
+from PyQt6.QtWidgets import (
+    QWidget, QPushButton, QLabel, QSlider, QColorDialog,
+    QFileDialog, QHBoxLayout, QMessageBox
+)
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QColor
 
 class ToolBar(QWidget):
-    def __init__(self, canvas):
-        super().__init__()
+    def __init__(self, canvas, parent=None):
+        super().__init__(parent)
+        self.canvas = canvas
+        self.init_ui()
 
-        self.canvas = canvas  # link to canvas to send updates
-
-        self.setFixedHeight(50)  # fix toolbar height so it doesn't stretch
-
+    def init_ui(self):
         layout = QHBoxLayout()
-        layout.setContentsMargins(5, 5, 5, 5)
         layout.setSpacing(10)
+        layout.setContentsMargins(5, 5, 5, 5)
 
-        # Tool selection
-        self.tool_label = QLabel("Tool:")
-        self.tool_combo = QComboBox()
-        self.tool_combo.addItems(["Pen", "Eraser", "Fill", "Rectangle", "Ellipse"])
-        self.tool_combo.currentTextChanged.connect(self.tool_changed)
+        pen_btn = QPushButton("Pen")
+        pen_btn.clicked.connect(lambda: self.canvas.set_tool("pen"))
+        layout.addWidget(pen_btn)
 
-        # Size slider
-        self.size_label = QLabel("Size:")
-        self.size_slider = QSlider(Qt.Orientation.Horizontal)
-        self.size_slider.setRange(1, 50)
-        self.size_slider.setValue(5)
-        self.size_slider.valueChanged.connect(self.size_changed)
+        eraser_btn = QPushButton("Eraser")
+        eraser_btn.clicked.connect(lambda: self.canvas.set_tool("eraser"))
+        layout.addWidget(eraser_btn)
 
-        # Opacity slider
-        self.opacity_label = QLabel("Opacity:")
-        self.opacity_slider = QSlider(Qt.Orientation.Horizontal)
-        self.opacity_slider.setRange(10, 100)
-        self.opacity_slider.setValue(100)
-        self.opacity_slider.valueChanged.connect(self.opacity_changed)
+        color_btn = QPushButton("Color")
+        color_btn.clicked.connect(self.select_color)
+        layout.addWidget(color_btn)
 
-        # Color picker button
-        self.color_button = QPushButton("Color")
-        self.color_button.clicked.connect(self.pick_color)
+        size_label = QLabel("Size")
+        layout.addWidget(size_label)
 
-        # Add widgets to layout
-        layout.addWidget(self.tool_label)
-        layout.addWidget(self.tool_combo)
+        size_slider = QSlider(Qt.Orientation.Horizontal)
+        size_slider.setMinimum(1)
+        size_slider.setMaximum(50)
+        size_slider.setValue(5)
+        size_slider.valueChanged.connect(lambda val: self.canvas.set_pen_size(val))
+        layout.addWidget(size_slider)
 
-        layout.addWidget(self.size_label)
-        layout.addWidget(self.size_slider)
+        undo_btn = QPushButton("Undo")
+        undo_btn.clicked.connect(self.canvas.undo)
+        layout.addWidget(undo_btn)
 
-        layout.addWidget(self.opacity_label)
-        layout.addWidget(self.opacity_slider)
+        redo_btn = QPushButton("Redo")
+        redo_btn.clicked.connect(self.canvas.redo)
+        layout.addWidget(redo_btn)
 
-        layout.addWidget(self.color_button)
+        save_btn = QPushButton("Save Drawing")
+        save_btn.clicked.connect(self.save_drawing)
+        layout.addWidget(save_btn)
 
-        layout.addStretch()
+        load_btn = QPushButton("Load Drawing")
+        load_btn.clicked.connect(self.load_drawing)
+        layout.addWidget(load_btn)
+
+        ruler_btn = QPushButton("Toggle Ruler")
+        ruler_btn.setCheckable(True)
+        ruler_btn.clicked.connect(self.toggle_ruler)
+        layout.addWidget(ruler_btn)
+
+        update_btn = QPushButton("Check for Updates")
+        update_btn.clicked.connect(self.canvas.window().check_for_updates)
+        layout.addWidget(update_btn)
 
         self.setLayout(layout)
 
-    def tool_changed(self, text):
-        self.canvas.set_tool(text)
-
-    def size_changed(self, value):
-        self.canvas.set_brush_size(value)
-
-    def opacity_changed(self, value):
-        self.canvas.set_opacity(value / 100)
-
-    def pick_color(self):
+    def select_color(self):
         color = QColorDialog.getColor()
         if color.isValid():
-            self.canvas.set_brush_color(color)
+            self.canvas.set_pen_color(color)
+
+    def save_drawing(self):
+        filepath, _ = QFileDialog.getSaveFileName(self, "Save Drawing", "", "PNG Files (*.png);;JPEG Files (*.jpg)")
+        if filepath:
+            self.canvas.save_image(filepath)
+            QMessageBox.information(self, "Saved", f"Drawing saved to {filepath}")
+
+    def load_drawing(self):
+        filepath, _ = QFileDialog.getOpenFileName(self, "Load Drawing", "", "PNG Files (*.png);;JPEG Files (*.jpg)")
+        if filepath:
+            self.canvas.load_image(filepath)
+
+    def toggle_ruler(self, checked):
+        self.canvas.show_ruler = checked
+        self.canvas.update()
